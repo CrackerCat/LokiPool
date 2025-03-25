@@ -8,6 +8,9 @@ pub struct Config {
     pub server: ServerConfig,
     pub proxy: ProxyConfig,
     pub log: LogConfig,
+    pub fofa: FofaConfig,
+    pub quake: QuakeConfig,
+    pub hunter: HunterConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -25,12 +28,40 @@ pub struct ProxyConfig {
     pub retry_times: u32,
     pub auto_switch: bool,
     pub switch_interval: u64,
+    pub max_concurrency: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LogConfig {
     pub show_connection_log: bool,
     pub show_error_log: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FofaConfig {
+    pub switch: bool,
+    pub api_url: String,
+    pub fofa_key: String,
+    pub query_str: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuakeConfig {
+    pub switch: bool,
+    pub api_url: String,
+    pub quake_key: String,
+    pub query_str: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HunterConfig {
+    pub switch: bool,
+    pub api_url: String,
+    pub hunter_key: String,
+    pub query_str: String,
+    pub size: u64,
 }
 
 impl Default for Config {
@@ -48,10 +79,32 @@ impl Default for Config {
                 retry_times: 3,
                 auto_switch: false,
                 switch_interval: 300,
+                max_concurrency: 50,
             },
             log: LogConfig {
                 show_connection_log: true,
                 show_error_log: false,
+            },
+            fofa: FofaConfig {
+                switch: false,
+                api_url: "".to_string(),
+                fofa_key: "".to_string(),
+                query_str: "".to_string(),
+                size: 100,
+            },
+            quake: QuakeConfig {
+                switch: false,
+                api_url: "https://quake.360.net/api/v3/search/quake_service".to_string(),
+                quake_key: "".to_string(),
+                query_str: "service:socks5 AND country: \"CN\" AND response:\"No authentication\"".to_string(),
+                size: 500,
+            },
+            hunter: HunterConfig {
+                switch: false,
+                api_url: "".to_string(),
+                hunter_key: "".to_string(),
+                query_str: "".to_string(),
+                size: 100,
             },
         }
     }

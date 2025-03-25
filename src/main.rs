@@ -4,6 +4,9 @@ use anyhow::Result;
 use lokipool::{Config, SocksServer};
 use tokio::signal;
 use colored::*;
+use std::path::Path;
+use std::fs;
+use std::fs::File;
 
 const LOGO: &str = r#"
 ██╗      ██████╗ ██╗  ██╗██╗██████╗  ██████╗  ██████╗ ██╗     
@@ -14,7 +17,7 @@ const LOGO: &str = r#"
 ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝      ╚═════╝  ╚═════╝ ╚══════╝
 "#;
 
-const VERSION: &str = "v0.1.1";
+const VERSION: &str = "v0.1.2";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -53,8 +56,49 @@ async fn main() -> Result<()> {
         );
     }
     
-    // 加载代理列表
+    // 检查代理文件是否存在
     let proxy_file = config.proxy.proxy_file.clone();
+    if !Path::new(&proxy_file).exists() {
+        println!("{} {}", "代理文件不存在，正在创建:".yellow().bold(), &proxy_file);
+        match File::create(&proxy_file) {
+            Ok(_) => println!("{}", "创建代理文件成功".green().bold()),
+            Err(e) => {
+                eprintln!("{} {}", "创建代理文件失败:".red().bold(), e);
+                return Ok(());
+            }
+        }
+    }
+    
+    // 检查代理文件是否为空
+    let is_empty = match fs::metadata(&proxy_file) {
+        Ok(metadata) => metadata.len() == 0,
+        Err(e) => {
+            eprintln!("{} {}", "读取代理文件失败:".red().bold(), e);
+            return Ok(());
+        }
+    };
+    
+    // 如果文件为空，从配置的源获取代理
+    if is_empty {
+        println!("{}", "代理文件为空".yellow().bold());
+        
+        // 检查是否有任何代理源开启
+        if config.fofa.switch || config.quake.switch || config.hunter.switch {
+            println!("{}", "尝试从配置的API获取代理...".cyan().bold());
+            match lokipool::crawler::fetch_proxies(&config).await {
+                Ok(_) => println!("{}", "从API获取代理成功".green().bold()),
+                Err(e) => {
+                    eprintln!("{} {}", "从API获取代理失败:".red().bold(), e);
+                    return Ok(());
+                }
+            }
+        } else {
+            eprintln!("{}", "代理文件内容为空且自动爬取功能未配置".red().bold());
+            return Ok(());
+        }
+    }
+    
+    // 加载代理列表
     if let Err(e) = server.get_proxy_pool().load_from_file(&proxy_file).await {
         eprintln!("{} {}", "加载代理列表失败:".red().bold(), e);
         return Ok(());

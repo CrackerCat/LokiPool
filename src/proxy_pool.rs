@@ -13,6 +13,8 @@ use std::net::SocketAddr;
 use crate::config::Config;
 use std::error::Error as StdError;
 use std::collections::HashSet;
+use anyhow;
+use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
 pub struct ProxyEntry {
@@ -43,7 +45,161 @@ impl ProxyPool {
         &self.config
     }
 
+    // 通用的代理测试函数
+    async fn test_proxy(proxy_addr: &str, timeout_secs: u64, fast_check: bool) -> anyhow::Result<Duration> {
+        let client = reqwest::Client::builder()
+            .proxy(Proxy::all(format!("socks5://{}", proxy_addr))?)
+            .build()?;
+
+        let start = Instant::now();
+        
+        if fast_check {
+            // 健康检查只发送HEAD请求
+            let resp = timeout(Duration::from_secs(timeout_secs), client.head("http://www.baidu.com").send()).await??;
+            if !resp.status().is_success() {
+                return Err(anyhow::anyhow!("HTTP状态码错误: {}", resp.status()));
+            }
+        } else {
+            // 完整测试发送HEAD和GET请求
+            timeout(Duration::from_secs(timeout_secs), async {
+                // 先发送HEAD请求检查连接性
+                let resp = client.head("http://www.baidu.com")
+                    .send()
+                    .await?;
+                
+                if !resp.status().is_success() {
+                    return Err(anyhow::anyhow!("HTTP状态码错误: {}", resp.status()));
+                }
+                
+                // 如果HEAD请求成功，再发送GET请求测试实际访问
+                let resp = client.get("http://www.baidu.com")
+                    .send()
+                    .await?;
+                
+                if !resp.status().is_success() {
+                    return Err(anyhow::anyhow!("HTTP状态码错误: {}", resp.status()));
+                }
+                
+                // 确保能读取响应内容
+                let _body = resp.bytes().await?;
+                Ok::<_, anyhow::Error>(())
+            }).await??;
+        }
+        
+        Ok(start.elapsed())
+    }
+
+    // 测试代理有效性（初始加载和健康检查共用）
+    pub async fn test_proxies<I, F, T>(&self, 
+        proxies: I, 
+        test_name: &str, 
+        timeout: u64,
+        fast_check: bool,
+        show_progress: bool,
+        each_item: F
+    ) -> Vec<ProxyEntry> 
+    where 
+        I: IntoIterator<Item = T>,
+        F: Fn(T) -> (String, Option<ProxyEntry>) + Send + Sync + 'static,
+        T: Send + Sync + 'static
+    {
+        let proxies: Vec<T> = proxies.into_iter().collect();
+        let total = proxies.len();
+        
+        if total == 0 {
+            return Vec::new();
+        }
+        
+        let max_concurrency = self.config.proxy.max_concurrency;
+        
+        println!("{} {} {}", 
+            format!("开始{}...", test_name).cyan().bold(),
+            format!("共{}个代理", total).yellow().bold(),
+            format!("并发数: {}", max_concurrency).green().bold()
+        );
+        
+        // 创建进度条
+        let pb = if show_progress {
+            let pb = ProgressBar::new(total as u64);
+            pb.set_style(ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                .unwrap()
+                .progress_chars("#>-"));
+            Some(Arc::new(pb))
+        } else {
+            None
+        };
+        
+        // 创建信号量控制并发数
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(max_concurrency));
+        let valid_proxies = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let mut handles = Vec::with_capacity(total);
+        
+        for proxy in proxies {
+            let semaphore = semaphore.clone();
+            let pb = pb.clone();
+            let valid_proxies = valid_proxies.clone();
+            let (addr, entry) = each_item(proxy);
+            
+            let handle = tokio::spawn(async move {
+                // 获取信号量许可
+                let _permit = semaphore.acquire().await.unwrap();
+                
+                // 测试代理
+                let result = Self::test_proxy(&addr, timeout, fast_check).await;
+                
+                // 更新进度条
+                if let Some(pb) = &pb {
+                    pb.inc(1);
+                }
+                
+                // 如果测试成功，添加到有效代理列表
+                if let Ok(latency) = result {
+                    let mut proxies = valid_proxies.lock().await;
+                    if let Some(mut old_entry) = entry {
+                        // 更新现有条目
+                        old_entry.latency = latency;
+                        old_entry.last_check = Instant::now();
+                        old_entry.fail_count = 0;
+                        proxies.push(old_entry);
+                    } else {
+                        // 创建新条目
+                        proxies.push(ProxyEntry {
+                            address: addr,
+                            latency,
+                            last_check: Instant::now(),
+                            fail_count: 0,
+                        });
+                    }
+                }
+            });
+            
+            handles.push(handle);
+        }
+        
+        // 等待所有测试完成
+        for handle in handles {
+            let _ = handle.await;
+        }
+        
+        // 结束进度条
+        if let Some(pb) = pb {
+            pb.finish_with_message(format!("{}完成", test_name));
+        }
+        
+        // 获取有效代理并排序
+        let mut proxies = Arc::try_unwrap(valid_proxies)
+            .expect("获取有效代理失败")
+            .into_inner();
+            
+        // 按延迟排序
+        proxies.sort_by(|a, b| a.latency.cmp(&b.latency));
+        
+        proxies
+    }
+    
     pub async fn load_from_file<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
+        // 读取代理文件
         let file = File::open(&path)?;
         let reader = io::BufReader::new(file);
         let mut proxies = HashSet::new();
@@ -55,98 +211,26 @@ impl ProxyPool {
                 proxies.insert(line.trim().to_string());
             }
         }
-
-        println!("{}", "开始测试代理...".cyan().bold());
-        let pb = ProgressBar::new(proxies.len() as u64);
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
-            .unwrap()
-            .progress_chars("#>-"));
-
-        // 创建测试任务
-        let mut test_futures = Vec::new();
-        for proxy in proxies {
-            let pb = pb.clone();
-            let config = self.config.clone();
-            test_futures.push(tokio::spawn(async move {
-                let client = reqwest::Client::builder()
-                    .proxy(Proxy::all(format!("socks5://{}", proxy))?)
-                    .build()?;
-
-                let start = Instant::now();
-                match timeout(Duration::from_secs(config.proxy.test_timeout), async {
-                    // 先发送HEAD请求检查连接性
-                    let resp = client.head("http://www.baidu.com")
-                        .send()
-                        .await?;
-                    
-                    if !resp.status().is_success() {
-                        return Err(anyhow::anyhow!("HTTP状态码错误: {}", resp.status()));
-                    }
-                    
-                    // 如果HEAD请求成功，再发送GET请求测试实际访问
-                    let resp = client.get("http://www.baidu.com")
-                        .send()
-                        .await?;
-                    
-                    if !resp.status().is_success() {
-                        return Err(anyhow::anyhow!("HTTP状态码错误: {}", resp.status()));
-                    }
-                    
-                    // 确保能读取响应内容
-                    let _body = resp.bytes().await?;
-                    Ok::<(), anyhow::Error>(())
-                }).await {
-                    Ok(Ok(_)) => {
-                        pb.inc(1);
-                        Ok((proxy, start.elapsed()))
-                    },
-                    Ok(Err(_)) => {
-                        pb.inc(1);
-                        Err(anyhow::anyhow!("代理无法正常访问目标网站"))
-                    },
-                    Err(_) => {
-                        pb.inc(1);
-                        Err(anyhow::anyhow!("代理访问超时"))
-                    },
-                }
-            }));
+        
+        if proxies.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "代理文件为空"));
         }
-
-        // 等待所有测试完成
-        let mut valid_proxies = Vec::new();
-        let mut invalid_proxies = Vec::new();
-
-        for future in test_futures {
-            match future.await {
-                Ok(Ok((addr, latency))) => {
-                    if latency <= Duration::from_secs(self.config.proxy.test_timeout) {
-                        valid_proxies.push(ProxyEntry {
-                            address: addr.clone(),
-                            latency,
-                            last_check: Instant::now(),
-                            fail_count: 0,
-                        });
-                    } else {
-                        invalid_proxies.push(addr);
-                    }
-                }
-                Ok(Err(_)) => {
-                    // 在错误情况下记录为无效代理
-                    invalid_proxies.push("unknown".to_string());
-                }
-                Err(_) => continue,
-            }
-        }
-
-        pb.finish_with_message("代理测试完成");
-
-        // 按延迟排序
-        valid_proxies.sort_by(|a, b| a.latency.cmp(&b.latency));
-
+        
+        let total = proxies.len();
+        
+        // 测试代理
+        let valid_proxies = self.test_proxies(
+            proxies, 
+            "代理测试", 
+            self.config.proxy.test_timeout, 
+            false, 
+            true,
+            |addr| (addr, None)
+        ).await;
+        
         // 更新代理列表
         let mut pool = self.proxies.write().await;
-        *pool = valid_proxies.clone(); // 克隆一份用于更新内存中的代理池
+        *pool = valid_proxies.clone();
 
         // 更新文件中的代理列表（只保留有效代理）
         let valid_proxies_str: Vec<String> = valid_proxies.iter()
@@ -156,20 +240,21 @@ impl ProxyPool {
 
         println!("\n{} {} {}", 
             "测试完成，可用代理:".green().bold(), 
-            pool.len().to_string().yellow().bold(),
+            valid_proxies.len().to_string().yellow().bold(),
             "个".green().bold()
         );
         
-        if !invalid_proxies.is_empty() {
+        let invalid_count = total - valid_proxies.len();
+        if invalid_count > 0 {
             println!("{} {} {}", 
                 "已删除无效代理:".yellow().bold(),
-                invalid_proxies.len().to_string().red().bold(),
+                invalid_count.to_string().red().bold(),
                 "个".yellow().bold()
             );
         }
         
         // 显示延迟信息
-        for (i, proxy) in pool.iter().enumerate() {
+        for (i, proxy) in valid_proxies.iter().enumerate() {
             let latency = proxy.latency.as_millis();
             let latency_str = match latency {
                 0..=100 => latency.to_string().green(),
@@ -190,69 +275,59 @@ impl ProxyPool {
         Ok(())
     }
 
-    // 在健康检查中也同步更新文件
+    // 启动健康检查
     fn start_health_check(&self) {
         let pool = Arc::clone(&self.proxies);
         let config = Arc::clone(&self.config);
         let proxy_file = Arc::clone(&self.proxy_file);
+        let self_clone = Arc::new(self.clone());
         
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(config.proxy.health_check_interval)).await;
                 
-                let mut proxies = pool.write().await;
-                let mut i = 0;
-
-                while i < proxies.len() {
-                    let addr = proxies[i].address.clone();
-                    match Self::test_proxy_health(&addr).await {
-                        Ok(latency) => {
-                            proxies[i].latency = latency;
-                            proxies[i].last_check = Instant::now();
-                            proxies[i].fail_count = 0;
-                            i += 1;
-                        }
-                        Err(_) => {
-                            proxies[i].fail_count += 1;
-                            if proxies[i].fail_count >= config.proxy.retry_times {
-                                let removed = proxies.remove(i);
-                                println!("{} {}", "代理失效，已移除:".red().bold(), removed.address);
-                            } else {
-                                i += 1;
-                            }
-                        }
-                    }
+                let proxies = pool.read().await;
+                if proxies.is_empty() {
+                    continue;
                 }
                 
-                // 重新按延迟排序
-                proxies.sort_by(|a, b| a.latency.cmp(&b.latency));
-
+                // 复制代理列表用于检查
+                let proxies_to_check: Vec<ProxyEntry> = proxies.clone();
+                let total = proxies_to_check.len();
+                drop(proxies); // 释放读锁
+                
+                // 健康检查
+                let valid_proxies = self_clone.test_proxies(
+                    proxies_to_check,
+                    "健康检查",
+                    3, // 健康检查超时时间
+                    true, // 快速检查
+                    false, // 不显示进度条
+                    |entry| (entry.address.clone(), Some(entry))
+                ).await;
+                
+                // 更新代理池
+                let mut pool_write = pool.write().await;
+                *pool_write = valid_proxies.clone();
+                
                 // 更新文件中的代理列表
-                if !proxies.is_empty() {
-                    let valid_proxies_str: Vec<String> = proxies.iter()
+                if !valid_proxies.is_empty() {
+                    let valid_proxies_str: Vec<String> = valid_proxies.iter()
                         .map(|p| p.address.clone())
                         .collect();
                     if let Err(e) = fs::write(&*proxy_file, valid_proxies_str.join("\n")) {
                         eprintln!("{} {}", "更新代理文件失败:".red().bold(), e);
                     }
                 }
+                
+                let removed_count = total - valid_proxies.len();
+                if removed_count > 0 {
+                    println!("{} {}", "已移除失效代理:".yellow().bold(), removed_count.to_string().red().bold());
+                }
+                
+                println!("{} {}", "健康检查完成，当前可用代理:".green().bold(), valid_proxies.len().to_string().yellow().bold());
             }
         });
-    }
-
-    async fn test_proxy_health(proxy_addr: &str) -> anyhow::Result<Duration> {
-        let client = reqwest::Client::builder()
-            .proxy(Proxy::all(format!("socks5://{}", proxy_addr))?)
-            .build()?;
-
-        let start = Instant::now();
-        let resp = timeout(Duration::from_secs(3), client.head("http://www.baidu.com").send()).await??;
-        
-        if resp.status().is_success() {
-            Ok(start.elapsed())
-        } else {
-            Err(anyhow::anyhow!("健康检查失败"))
-        }
     }
 
     pub async fn get_connection(&self) -> Result<TcpStream, Box<dyn StdError>> {
@@ -284,5 +359,17 @@ impl ProxyPool {
 
     pub async fn list_proxies(&self) -> Vec<ProxyEntry> {
         self.proxies.read().await.clone()
+    }
+}
+
+// 添加Clone实现，用于健康检查
+impl Clone for ProxyPool {
+    fn clone(&self) -> Self {
+        ProxyPool {
+            proxies: Arc::new(RwLock::new(Vec::new())),
+            current_index: Arc::new(RwLock::new(0)),
+            config: self.config.clone(),
+            proxy_file: self.proxy_file.clone(),
+        }
     }
 } 
