@@ -19,14 +19,14 @@ show_error_log = false      # 设置为 false 可以关闭错误日志
 [fofa]
 switch = false
 api_url = 'https://fofa.info/api/v1/search/all'
-fofa_key = '186******f8a******6a92******4abf1c' 替换成自己的key
+fofa_key = '186******f8a******6a92******4abf1c' # 替换成自己的key
 query_str = '(protocol=="socks5" && country="CN" && banner="Method:No Authentication") && after="2025-02-25"' # 这里可以用after添加时间限制，过滤不可用的代理
 size = 10000 # 这里是获取的条数
 
 [quake]
 switch = true
 api_url = 'https://quake.360.net/api/v3/search/quake_service'
-quake_key = '0e****-3***-4***-a***-5a21********' 替换成自己的key
+quake_key = '0e****-3***-4***-a***-5a21********' # 替换成自己的key
 query_str = 'service:socks5 AND country: "CN" AND response:"No authentication"'
 size = 500 # 这里是获取的条数
 
