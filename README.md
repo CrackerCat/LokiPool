@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/版本-0.1.1-blue)
+![Version](https://img.shields.io/badge/版本-0.1.2-blue)
 ![Language](https://img.shields.io/badge/语言-Rust-orange)
 ![License](https://img.shields.io/badge/许可证-GPL-green)
 
@@ -22,6 +22,8 @@ LokiPool是一个使用Rust编写的高性能SOCKS5代理池管理工具，能�
 - **⏱️ 延迟排序** - 根据对百度的访问延迟，对代理进行智能排序
 - **💻 交互式管理** - 支持通过命令行实时查看和管理代理状态
 - **🔄 自动切换** - 可配置自动定时切换代理，增强匿名性
+- **🔎 自动获取代理** - 支持从FOFA、Hunter和Quake自动获取最新代理
+- **⚙️ 并发控制** - 智能控制代理测试的并发数，提高效率
 
 ## 🚀 安装方法
 
@@ -51,8 +53,9 @@ cargo build --release
 ## 📝 使用方法
 
 1. 在`proxies.txt`文件中添加SOCKS5代理服务器地址（每行一个，格式：`IP:端口`）
-2. 运行程序，将自动测试代理速度并启动本地代理服务
-3. 配置您的应用程序使用本地SOCKS5代理（默认`127.0.0.1:1080`）
+2. 或启用自动代理获取功能，从FOFA/Hunter/Quake获取最新代理
+3. 运行程序，将自动测试代理速度并启动本地代理服务
+4. 配置您的应用程序使用本地SOCKS5代理（默认`127.0.0.1:1080`）
 
 ### 交互命令
 
@@ -72,7 +75,7 @@ cargo build --release
 ```toml
 [server]
 bind_host = "127.0.0.1"  # 本地绑定地址
-bind_port = 1080        # 本地绑定端口
+bind_port = 1080         # 本地绑定端口
 max_connections = 100    # 最大连接数
 ```
 
@@ -86,6 +89,7 @@ health_check_interval = 300      # 健康检测间隔(秒)
 retry_times = 3                  # 失败重试次数
 auto_switch = false              # 是否自动切换代理
 switch_interval = 5              # 自动切换间隔(秒)
+max_concurrency = 100            # 代理测试最大并发数
 ```
 
 ### 日志配置
@@ -94,6 +98,34 @@ switch_interval = 5              # 自动切换间隔(秒)
 [log]
 show_connection_log = false      # 是否显示连接日志
 show_error_log = false           # 是否显示错误日志
+```
+
+### 代理获取配置
+
+```toml
+# FOFA API配置
+[fofa]
+switch = false                   # 是否启用FOFA获取代理
+api_url = 'https://fofa.info/api/v1/search/all'
+fofa_key = '你的FOFA_KEY'
+query_str = '(protocol=="socks5" && country="CN" && banner="Method:No Authentication") && after="2025-02-25"' # 时间可以自定义
+size = 10000                     # 获取代理数量
+
+# Quake API配置
+[quake]
+switch = false                   # 是否启用Quake获取代理
+api_url = 'https://quake.360.net/api/v3/search/quake_service'
+quake_key = '你的QUAKE_KEY'
+query_str = 'service:socks5 AND country: "CN" AND response:"No authentication"'
+size = 500                       # 获取代理数量
+
+# Hunter API配置
+[hunter]
+switch = false                   # 是否启用Hunter获取代理
+api_url = 'https://hunter.qianxin.com/openApi/search'
+hunter_key = '你的HUNTER_KEY'
+query_str = 'protocol=="socks5"&&protocol.banner="No authentication"&&ip.country="CN"'
+size = 4                         # 获取页数，每页100条
 ```
 
 ## 🔧 高级用法
@@ -111,6 +143,14 @@ LokiPool可以轻松与各种应用程序集成：
 - 增加`max_connections`值以支持更多并发连接
 - 调整`health_check_interval`减少服务器负担
 - 根据网络环境调整`test_timeout`获得更准确的延迟测试
+- 调整`max_concurrency`优化代理测试性能和资源占用
+
+### 自动获取代理
+
+1. 配置至少一个API源（FOFA/Quake/Hunter）
+2. 设置相应的API Key和查询语句
+3. 将对应的`switch`选项设为`true`
+4. 程序将在代理文件为空时自动获取新代理
 
 ## 📜 许可证
 
