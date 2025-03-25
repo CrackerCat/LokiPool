@@ -24,7 +24,7 @@ query_str = '(protocol=="socks5" && country="CN" && banner="Method:No Authentica
 size = 10000 # 这里是获取的条数
 
 [quake]
-switch = true
+switch = false
 api_url = 'https://quake.360.net/api/v3/search/quake_service'
 quake_key = '0e****-3***-4***-a***-5a21********' # 替换成自己的key
 query_str = 'service:socks5 AND country: "CN" AND response:"No authentication"'
