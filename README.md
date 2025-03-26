@@ -160,6 +160,10 @@ GPL License
 
 欢迎提交PR和Issue，一起改进LokiPool！
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Le1a/LokiPool&type=Date)](https://star-history.com/#Le1a/LokiPool&Date)
+
 ---
 
 <div align="center">
