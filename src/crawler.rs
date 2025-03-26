@@ -203,11 +203,6 @@ async fn fetch_from_quake(config: &Config) -> Result<Vec<String>> {
         let proxy = format!("{}:{}", item.ip, item.port);
         proxies.push(proxy);
     }
-    
-    println!("{} {}", 
-        "从Quake获取代理数量:".green().bold(),
-        proxies.len().to_string().yellow().bold()
-    );
 
     Ok(proxies)
 }
