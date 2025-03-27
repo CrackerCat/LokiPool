@@ -1,4 +1,4 @@
-![59967a85fa974bdbd341416120a91248](https://github.com/user-attachments/assets/b71e4733-8d79-44bc-9238-2f14fb76a51f)# LokiPool
+# LokiPool
 
 <div align="center">
 
