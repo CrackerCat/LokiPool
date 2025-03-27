@@ -357,6 +357,18 @@ impl ProxyPool {
         proxies.get(*index).cloned()
     }
 
+    pub async fn choose_proxy(&self, index : usize) -> Option<ProxyEntry> {
+        let proxies = self.proxies.read().await;
+        let mut current_index = self.current_index.write().await;
+        
+        if proxies.is_empty() {
+            return None;
+        }
+
+        *current_index = (index - 1) % proxies.len();
+        proxies.get(*current_index).cloned()
+    }
+
     pub async fn list_proxies(&self) -> Vec<ProxyEntry> {
         self.proxies.read().await.clone()
     }
