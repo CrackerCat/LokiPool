@@ -237,11 +237,11 @@ async fn main() -> Result<()> {
 
 pub async fn help() {
     println!("\n可用命令:");
-    println!("  help  - 显示帮助信息");
-    println!("  list  - 显示所有代理");
-    println!("  next  - 切换到下一个代理");
+    println!("  help         - 显示帮助信息");
+    println!("  list         - 显示所有代理");
+    println!("  next         - 切换到下一个代理");
     println!("  goto <序号>  - 切换到对应代理节点");
-    println!("  show  - 显示当前代理");
-    println!("  ping  - 延迟检测");
-    println!("  quit  - 退出程序\n");
+    println!("  show         - 显示当前代理");
+    println!("  ping         - 延迟检测");
+    println!("  quit         - 退出程序\n");
 }
