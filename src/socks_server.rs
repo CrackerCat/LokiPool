@@ -104,7 +104,7 @@ impl SocksServer {
         let (mut inbound_reader, mut inbound_writer) = client.into_split();
 
         // 处理SOCKS5握手
-        handle_handshake(&mut inbound_reader, &mut inbound_writer).await?;
+        handle_handshake(&mut inbound_reader, &mut inbound_writer, &config).await?;
 
         // 读取SOCKS5请求
         let mut buf = [0u8; 4];
@@ -278,7 +278,7 @@ impl SocksServer {
     }
 }
 
-async fn handle_handshake<R, W>(reader: &mut R, writer: &mut W) -> Result<()>
+async fn handle_handshake<R, W>(reader: &mut R, writer: &mut W, config: &Arc<Config>) -> Result<()>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -295,9 +295,56 @@ where
     let mut methods = vec![0u8; nmethods];
     reader.read_exact(&mut methods).await?;
 
-    // 回复使用无认证方法
-    writer.write_all(&[0x05, 0x00]).await?;
-    writer.flush().await?;
+    // 检查是否需要认证
+    if config.proxy.use_auth {
+        // 查找客户端是否支持用户名/密码认证 (0x02)
+        if methods.contains(&0x02) {
+            // 回复使用用户名/密码认证方法
+            writer.write_all(&[0x05, 0x02]).await?;
+            writer.flush().await?;
+            
+            // 处理用户名/密码认证
+            let mut auth_version = [0u8; 1];
+            reader.read_exact(&mut auth_version).await?;
+            
+            if auth_version[0] != 0x01 {
+                return Err(anyhow::anyhow!("不支持的认证版本"));
+            }
+            
+            // 读取用户名
+            let ulen = reader.read_u8().await? as usize;
+            let mut username = vec![0u8; ulen];
+            reader.read_exact(&mut username).await?;
+            let username = String::from_utf8(username)?;
+            
+            // 读取密码
+            let plen = reader.read_u8().await? as usize;
+            let mut password = vec![0u8; plen];
+            reader.read_exact(&mut password).await?;
+            let password = String::from_utf8(password)?;
+            
+            // 验证用户名和密码
+            if username == config.proxy.username && password == config.proxy.password {
+                // 认证成功
+                writer.write_all(&[0x01, 0x00]).await?;
+                writer.flush().await?;
+            } else {
+                // 认证失败
+                writer.write_all(&[0x01, 0x01]).await?;
+                writer.flush().await?;
+                return Err(anyhow::anyhow!("认证失败"));
+            }
+        } else {
+            // 客户端不支持我们需要的认证方法
+            writer.write_all(&[0x05, 0xFF]).await?;
+            writer.flush().await?;
+            return Err(anyhow::anyhow!("客户端不支持所需的认证方法"));
+        }
+    } else {
+        // 不需要认证，回复使用无认证方法
+        writer.write_all(&[0x05, 0x00]).await?;
+        writer.flush().await?;
+    }
 
     Ok(())
 } 

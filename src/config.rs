@@ -30,6 +30,9 @@ pub struct ProxyConfig {
     pub auto_switch: bool,
     pub switch_interval: u64,
     pub max_concurrency: usize,
+    pub use_auth: bool,          // 是否使用代理认证
+    pub username: String,        // 代理认证用户名
+    pub password: String,        // 代理认证密码
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -80,6 +83,9 @@ retry_times = 3
 auto_switch = false        # 是否开启自动切换代理
 switch_interval = 300      # 自动切换间隔(秒)
 max_concurrency = 100     # 最大并发测试数
+use_auth = false          # 是否使用代理认证
+username = ""             # 代理认证用户名
+password = ""             # 代理认证密码
 
 [log]
 show_connection_log = false  # 设置为 false 可以关闭连接日志
@@ -131,6 +137,9 @@ impl Default for Config {
                         auto_switch: false,
                         switch_interval: 300,
                         max_concurrency: 100,
+                        use_auth: false,
+                        username: String::new(),
+                        password: String::new(),
                     },
                     log: LogConfig {
                         show_connection_log: false,
