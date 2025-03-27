@@ -330,15 +330,6 @@ impl ProxyPool {
         });
     }
 
-    pub async fn get_connection(&self) -> Result<TcpStream, Box<dyn StdError>> {
-        if let Some(proxy) = self.get_current_proxy().await {
-            let addr: SocketAddr = proxy.address.parse()?;
-            Ok(TcpStream::connect(addr).await?)
-        } else {
-            Err("没有可用的代理".into())
-        }
-    }
-
     pub async fn get_current_proxy(&self) -> Option<ProxyEntry> {
         let proxies = self.proxies.read().await;
         let index = *self.current_index.read().await;
