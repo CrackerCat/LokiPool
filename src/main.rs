@@ -113,21 +113,19 @@ async fn main() -> Result<()> {
             host,
             port
         );
-        println!("\n可用命令:");
-        println!("  list  - 显示所有代理");
-        println!("  next  - 切换到下一个代理");
-        println!("  show  - 显示当前代理");
-        println!("  quit  - 退出程序\n");
-        
+        help().await;
         print!("> ");
-        let _ = std::io::stdout().flush();
         
+        let _ = std::io::stdout().flush();
         let stdin = io::stdin();
         let reader = BufReader::new(stdin);
         let mut lines = reader.lines();
 
         while let Ok(Some(line)) = lines.next_line().await {
-            match line.trim() {
+            match line.trim().split_whitespace().next().unwrap_or("") {
+                "help" => {
+                    help().await;
+                }
                 "list" => {
                     println!("\n当前代理列表:");
                     for (i, proxy) in server_clone.get_proxy_pool().list_proxies().await.iter().enumerate() {
@@ -169,9 +167,43 @@ async fn main() -> Result<()> {
                         println!("{}", "没有可用的代理".red().bold());
                     }
                 }
+                "ping" => {
+                    if let Err(e) = server_clone.get_proxy_pool().load_from_file(&proxy_file).await {
+                        eprintln!("{} {}", "加载代理列表失败:".red().bold(), e);
+                    }
+                }
+                "goto" => {
+                    // 获取参数
+                    let arg = line.trim().split_whitespace().nth(1).unwrap_or("null");
+
+                    // 尝试将参数解析为 usize 类型的索引
+                    match arg.parse::<usize>() {
+                        Ok(index) => {
+                            // 如果解析成功，尝试获取代理
+                            match server_clone.get_proxy_pool().choose_proxy(index).await {
+                                Some(proxy) => {
+                                    println!(
+                                        "{} {} ({}: {}ms)",
+                                        "切换到代理:".green().bold(),
+                                        proxy.address.cyan(),
+                                        "延迟".yellow(),
+                                        proxy.latency.as_millis().to_string().yellow()
+                                    );
+                                }
+                                None => {
+                                    println!("{}", "没有可用的代理".red().bold());
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // 如果解析失败，打印错误信息
+                            println!("{} {}", "参数错误，输入 `help` 查看帮助信息: ".yellow().bold(), arg);
+                        }
+                    }
+                }
                 "quit" => break,
                 "" => {}, // 忽略空行
-                _ => println!("{}", "未知命令".red()),
+                _ => println!("{}", "未知命令，输入 `help` 查看帮助信息".red()),
             }
             print!("> ");
             let _ = std::io::stdout().flush();
@@ -200,4 +232,16 @@ async fn main() -> Result<()> {
     println!("{}", "服务器已关闭".green().bold());
 
     Ok(())
+}
+
+
+pub async fn help() {
+    println!("\n可用命令:");
+    println!("  help  - 显示帮助信息");
+    println!("  list  - 显示所有代理");
+    println!("  next  - 切换到下一个代理");
+    println!("  goto <序号>  - 切换到对应代理节点");
+    println!("  show  - 显示当前代理");
+    println!("  ping  - 延迟检测");
+    println!("  quit  - 退出程序\n");
 }
