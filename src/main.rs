@@ -17,7 +17,7 @@ const LOGO: &str = r#"
 ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝      ╚═════╝  ╚═════╝ ╚══════╝
 "#;
 
-const VERSION: &str = "v0.1.4";
+const VERSION: &str = "v0.1.5";
 
 #[tokio::main]
 async fn main() -> Result<()> {
