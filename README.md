@@ -1,4 +1,4 @@
-# LokiPool
+![59967a85fa974bdbd341416120a91248](https://github.com/user-attachments/assets/b71e4733-8d79-44bc-9238-2f14fb76a51f)# LokiPool
 
 <div align="center">
 
@@ -19,6 +19,11 @@
 ## 📖 项目概述
 
 LokiPool是一个使用Rust编写的高性能SOCKS5代理池管理工具，能够自动测速、管理多个代理服务器，提供高效稳定的匿名代理服务。通过本地转发，让您使用最佳的代理服务，同时保持稳定的连接质量。
+
+## 📝 TodoList
+1. 添加健康检测开关，支持可选择性关闭
+
+2. 修复bug：健康检测 or 手动测速后，代理池索引未重置的问题
 
 ## ✨ 主要功能
 
