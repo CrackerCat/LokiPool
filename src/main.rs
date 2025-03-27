@@ -104,6 +104,9 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     
+    // 启动健康检查任务
+    server.get_proxy_pool().start_health_check();
+    
     // 创建用户输入处理任务
     let server_clone = server.clone();
     let input_handle = tokio::spawn(async move {
@@ -242,6 +245,6 @@ pub async fn help() {
     println!("  next         - 切换到下一个代理");
     println!("  goto <序号>  - 切换到对应代理节点");
     println!("  show         - 显示当前代理");
-    println!("  ping         - 延迟检测");
+    println!("  ping         - 测试所有代理并更新延迟");
     println!("  quit         - 退出程序\n");
 }

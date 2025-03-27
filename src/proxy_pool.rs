@@ -266,18 +266,20 @@ impl ProxyPool {
         }
         println!();
 
-        // 启动健康检查任务
-        self.start_health_check();
+        // 不在这里启动健康检查任务
+        // self.start_health_check();
 
         Ok(())
     }
 
-    // 启动健康检查
-    fn start_health_check(&self) {
+    // 启动健康检查 - 改为公共方法
+    pub fn start_health_check(&self) {
         let pool = Arc::clone(&self.proxies);
         let config = Arc::clone(&self.config);
         let proxy_file = Arc::clone(&self.proxy_file);
         let self_clone = Arc::new(self.clone());
+        
+        println!("{}", "启动健康检查任务".green().bold());
         
         tokio::spawn(async move {
             loop {
