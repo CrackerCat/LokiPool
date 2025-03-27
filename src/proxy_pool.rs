@@ -228,6 +228,10 @@ impl ProxyPool {
         // 更新代理列表
         let mut pool = self.proxies.write().await;
         *pool = valid_proxies.clone();
+        
+        // 重置当前索引为0
+        let mut index = self.current_index.write().await;
+        *index = 0;
 
         // 更新文件中的代理列表（只保留有效代理）
         let valid_proxies_str: Vec<String> = valid_proxies.iter()
@@ -278,6 +282,7 @@ impl ProxyPool {
         let config = Arc::clone(&self.config);
         let proxy_file = Arc::clone(&self.proxy_file);
         let self_clone = Arc::new(self.clone());
+        let current_index = Arc::clone(&self.current_index);
         
         println!("{}", "启动健康检查任务".green().bold());
         
@@ -308,6 +313,10 @@ impl ProxyPool {
                 // 更新代理池
                 let mut pool_write = pool.write().await;
                 *pool_write = valid_proxies.clone();
+                
+                // 重置当前索引为0
+                let mut index = current_index.write().await;
+                *index = 0;
                 
                 // 更新文件中的代理列表
                 if !valid_proxies.is_empty() {

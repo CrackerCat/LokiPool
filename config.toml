@@ -6,6 +6,7 @@ max_connections = 100
 [proxy]
 proxy_file = "proxies.txt"
 test_timeout = 5
+health_check_switch = true  # 是否启用健康检查
 health_check_interval = 300 # 健康检测间隔(秒)
 retry_times = 3
 auto_switch = false        # 是否开启自动切换代理

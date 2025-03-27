@@ -24,6 +24,7 @@ pub struct ServerConfig {
 pub struct ProxyConfig {
     pub proxy_file: String,
     pub test_timeout: u64,
+    pub health_check_switch: bool,
     pub health_check_interval: u64,
     pub retry_times: u32,
     pub auto_switch: bool,
@@ -73,6 +74,7 @@ max_connections = 100
 [proxy]
 proxy_file = "proxies.txt"
 test_timeout = 5
+health_check_switch = true  # 是否启用健康检查
 health_check_interval = 300 # 健康检测间隔(秒)
 retry_times = 3
 auto_switch = false        # 是否开启自动切换代理
@@ -123,6 +125,7 @@ impl Default for Config {
                     proxy: ProxyConfig {
                         proxy_file: "proxies.txt".to_string(),
                         test_timeout: 5,
+                        health_check_switch: true,
                         health_check_interval: 300,
                         retry_times: 3,
                         auto_switch: false,

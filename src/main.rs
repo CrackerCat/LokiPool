@@ -104,8 +104,16 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     
-    // 启动健康检查任务
-    server.get_proxy_pool().start_health_check();
+    // 根据配置决定是否启动健康检查任务
+    if config.proxy.health_check_switch {
+        server.get_proxy_pool().start_health_check();
+        println!("{} {}", 
+            "健康检查已启用，间隔:".green().bold(),
+            config.proxy.health_check_interval.to_string().yellow().bold()
+        );
+    } else {
+        println!("{}", "健康检查已禁用".yellow().bold());
+    }
     
     // 创建用户输入处理任务
     let server_clone = server.clone();
@@ -171,6 +179,7 @@ async fn main() -> Result<()> {
                     }
                 }
                 "ping" => {
+                    println!("{}", "开始延迟测试...".cyan().bold());
                     if let Err(e) = server_clone.get_proxy_pool().load_from_file(&proxy_file).await {
                         eprintln!("{} {}", "加载代理列表失败:".red().bold(), e);
                     }
