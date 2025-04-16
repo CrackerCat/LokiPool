@@ -19,7 +19,8 @@
 ## 📖 项目概述
 
 LokiPool是一个使用Rust编写的高性能SOCKS5代理池管理工具，能够自动测速、管理多个代理服务器，提供高效稳定的匿名代理服务。通过本地转发，让您使用最佳的代理服务，同时保持稳定的连接质量。
-<img width="853" alt="image" src="https://github.com/user-attachments/assets/ff537540-a377-413a-836f-444f66e3e8f6" />
+<img width="944" alt="image" src="https://github.com/user-attachments/assets/b18492e1-3875-4f84-893c-9f0d099fef26" />
+
 
 
 ## 📝 TodoList
